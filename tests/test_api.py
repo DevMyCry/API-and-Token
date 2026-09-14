@@ -1,7 +1,9 @@
-def create_key(client, admin_headers, label="test-client", daily_quota=None):
+def create_key(client, admin_headers, label="test-client", quota_limit=None, quota_period_seconds=None):
     payload = {"label": label}
-    if daily_quota is not None:
-        payload["daily_quota"] = daily_quota
+    if quota_limit is not None:
+        payload["quota_limit"] = quota_limit
+    if quota_period_seconds is not None:
+        payload["quota_period_seconds"] = quota_period_seconds
     response = client.post("/admin/keys", json=payload, headers=admin_headers)
     assert response.status_code == 201
     return response.json()
@@ -44,10 +46,18 @@ def test_revoked_key_rejected(client, admin_headers):
 
 
 def test_quota_exceeded_returns_429(client, admin_headers):
-    created = create_key(client, admin_headers, label="klien-kuota-kecil", daily_quota=1)
+    created = create_key(client, admin_headers, label="klien-kuota-kecil", quota_limit=1)
 
     first = client.post("/auth/token", json={"api_key": created["api_key"]})
     assert first.status_code == 200
 
     second = client.post("/auth/token", json={"api_key": created["api_key"]})
     assert second.status_code == 429
+
+
+def test_custom_quota_period_is_stored(client, admin_headers):
+    created = create_key(
+        client, admin_headers, label="klien-2-jam", quota_limit=10_000_000, quota_period_seconds=7200
+    )
+    assert created["quota_limit"] == 10_000_000
+    assert created["quota_period_seconds"] == 7200

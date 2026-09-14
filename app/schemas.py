@@ -5,21 +5,26 @@ from pydantic import BaseModel, Field
 
 class ApiKeyCreateRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=200)
-    daily_quota: int | None = Field(default=None, gt=0)
+    quota_limit: int | None = Field(default=None, gt=0, description="Jumlah request maksimum per periode")
+    quota_period_seconds: int | None = Field(
+        default=None, gt=0, description="Panjang periode kuota dalam detik (mis. 7200 = 2 jam)"
+    )
 
 
 class ApiKeyCreateResponse(BaseModel):
     id: str
     label: str
     api_key: str
-    daily_quota: int
+    quota_limit: int
+    quota_period_seconds: int
     created_at: datetime
 
 
 class ApiKeyPublic(BaseModel):
     id: str
     label: str
-    daily_quota: int
+    quota_limit: int
+    quota_period_seconds: int
     is_revoked: bool
     created_at: datetime
 
@@ -30,7 +35,8 @@ class ApiKeyRotateResponse(BaseModel):
     id: str
     label: str
     api_key: str
-    daily_quota: int
+    quota_limit: int
+    quota_period_seconds: int
 
 
 class TokenRequest(BaseModel):

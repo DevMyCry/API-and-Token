@@ -6,7 +6,7 @@ Backend self-hosted untuk menerbitkan dan mengelola **API key** serta **access t
 
 1. **Generate & kelola API key** — key acak kriptografis (`secrets.token_urlsafe`), hanya hash SHA-256-nya yang disimpan di database. Plaintext key hanya ditampilkan sekali saat dibuat/di-rotate.
 2. **Access token berbasis JWT** — klien menukar API key dengan JWT access token berumur pendek (`POST /auth/token`), lalu memakai token itu untuk memanggil endpoint yang dilindungi.
-3. **Rate limiting & kuota per API key** — setiap key punya kuota request/hari (default via env, bisa dioverride per key). Kuota di-reset otomatis saat tanggal berganti. Jika kuota habis, server membalas `429 Too Many Requests`.
+3. **Rate limiting & kuota per API key** — setiap key punya kuota request per periode waktu tertentu (default via env, bisa dioverride per key, termasuk panjang periodenya — misalnya 1.000 request/hari atau 10.000.000 request/2 jam). Kuota di-reset otomatis begitu periode berikutnya dimulai. Jika kuota habis, server membalas `429 Too Many Requests`.
 
 ## Struktur proyek
 
@@ -53,7 +53,8 @@ Lihat `.env.example`:
 | `JWT_SECRET` | `change-me-jwt-secret` | Secret untuk menandatangani JWT. **Wajib diganti.** |
 | `JWT_ALGORITHM` | `HS256` | Algoritma JWT. |
 | `JWT_EXPIRY_SECONDS` | `3600` | Umur access token (detik). |
-| `DEFAULT_DAILY_QUOTA` | `1000` | Kuota request/hari default untuk API key baru. |
+| `DEFAULT_QUOTA_LIMIT` | `1000` | Jumlah request maksimum per periode, default untuk API key baru. |
+| `DEFAULT_QUOTA_PERIOD_SECONDS` | `86400` | Panjang periode kuota dalam detik, default untuk API key baru (86400 = 1 hari, 7200 = 2 jam). |
 | `DATABASE_URL` | `sqlite:///./data.db` | Connection string database (SQLAlchemy). |
 
 ## Endpoint
@@ -68,8 +69,10 @@ Semua endpoint admin butuh header `X-Admin-Secret: <ADMIN_SECRET>`.
 curl -X POST http://127.0.0.1:8000/admin/keys \
   -H "X-Admin-Secret: <ADMIN_SECRET>" \
   -H "Content-Type: application/json" \
-  -d '{"label": "klien-a", "daily_quota": 1000}'
+  -d '{"label": "klien-a", "quota_limit": 10000000, "quota_period_seconds": 7200}'
 ```
+
+Contoh di atas membuat key dengan kuota 10.000.000 request per 2 jam (7200 detik).
 
 Response (plaintext key **hanya muncul di sini, sekali saja** — simpan baik-baik):
 
@@ -78,12 +81,13 @@ Response (plaintext key **hanya muncul di sini, sekali saja** — simpan baik-ba
   "id": "055eb70247934def979c83a1c8d998d4",
   "label": "klien-a",
   "api_key": "vs8L-toxHqB1OUJF0g3Y-lfmgkllK5oDz6a9X8-B-ws",
-  "daily_quota": 1000,
+  "quota_limit": 10000000,
+  "quota_period_seconds": 7200,
   "created_at": "2026-09-14T04:56:48.944379"
 }
 ```
 
-`daily_quota` opsional; jika tidak dikirim, memakai `DEFAULT_DAILY_QUOTA`.
+`quota_limit` dan `quota_period_seconds` opsional; jika tidak dikirim, memakai `DEFAULT_QUOTA_LIMIT` dan `DEFAULT_QUOTA_PERIOD_SECONDS`. Contoh nilai `quota_period_seconds` yang umum: `3600` (1 jam), `7200` (2 jam), `86400` (1 hari).
 
 #### List API key
 
@@ -92,7 +96,7 @@ curl http://127.0.0.1:8000/admin/keys \
   -H "X-Admin-Secret: <ADMIN_SECRET>"
 ```
 
-Tidak pernah menampilkan plaintext key, hanya metadata (`id`, `label`, `daily_quota`, `is_revoked`, `created_at`).
+Tidak pernah menampilkan plaintext key, hanya metadata (`id`, `label`, `quota_limit`, `quota_period_seconds`, `is_revoked`, `created_at`).
 
 #### Revoke API key
 
@@ -130,7 +134,7 @@ Response:
 }
 ```
 
-Endpoint ini juga memakan kuota harian API key. Jika kuota habis, responsnya `429`.
+Endpoint ini juga memakan kuota API key untuk periode berjalan. Jika kuota habis, responsnya `429`.
 
 ### Endpoint terproteksi (contoh)
 
@@ -149,7 +153,7 @@ Response:
 {"result": "echo: halo dunia"}
 ```
 
-Setiap pemanggilan endpoint ini juga memakan kuota harian API key pemilik token; kalau habis, responsnya `429`.
+Setiap pemanggilan endpoint ini juga memakan kuota API key pemilik token untuk periode berjalan; kalau habis, responsnya `429`.
 
 ### Health check
 
@@ -165,7 +169,7 @@ pip install -r requirements.txt
 pytest -v
 ```
 
-Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, dan kuota habis mengembalikan `429`.
+Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, kuota habis mengembalikan `429`, dan periode kuota kustom (mis. per 2 jam) tersimpan dengan benar.
 
 ## Deploy self-hosted dengan Docker
 
@@ -178,7 +182,8 @@ docker run -d \
   -e ADMIN_SECRET="ganti-dengan-secret-anda" \
   -e JWT_SECRET="ganti-dengan-secret-anda" \
   -e JWT_EXPIRY_SECONDS=3600 \
-  -e DEFAULT_DAILY_QUOTA=1000 \
+  -e DEFAULT_QUOTA_LIMIT=1000 \
+  -e DEFAULT_QUOTA_PERIOD_SECONDS=86400 \
   -v $(pwd)/data:/app/data \
   -e DATABASE_URL="sqlite:////app/data/data.db" \
   api-and-token

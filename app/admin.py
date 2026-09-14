@@ -20,7 +20,8 @@ def create_key(payload: ApiKeyCreateRequest, db: Session = Depends(get_db)):
     api_key = ApiKey(
         label=payload.label,
         key_hash=hash_key(plaintext_key),
-        daily_quota=payload.daily_quota or settings.DEFAULT_DAILY_QUOTA,
+        quota_limit=payload.quota_limit or settings.DEFAULT_QUOTA_LIMIT,
+        quota_period_seconds=payload.quota_period_seconds or settings.DEFAULT_QUOTA_PERIOD_SECONDS,
     )
     db.add(api_key)
     db.commit()
@@ -30,7 +31,8 @@ def create_key(payload: ApiKeyCreateRequest, db: Session = Depends(get_db)):
         id=api_key.id,
         label=api_key.label,
         api_key=plaintext_key,
-        daily_quota=api_key.daily_quota,
+        quota_limit=api_key.quota_limit,
+        quota_period_seconds=api_key.quota_period_seconds,
         created_at=api_key.created_at,
     )
 
@@ -68,5 +70,6 @@ def rotate_key(key_id: str, db: Session = Depends(get_db)):
         id=api_key.id,
         label=api_key.label,
         api_key=plaintext_key,
-        daily_quota=api_key.daily_quota,
+        quota_limit=api_key.quota_limit,
+        quota_period_seconds=api_key.quota_period_seconds,
     )

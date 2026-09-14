@@ -1,7 +1,7 @@
 import hashlib
 import hmac
 import secrets
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import Depends, Header, HTTPException, status
@@ -9,6 +9,22 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import ApiKey, UsageCounter, get_db
+
+
+def _format_period(seconds: int) -> str:
+    if seconds % 86400 == 0:
+        return f"{seconds // 86400} hari"
+    if seconds % 3600 == 0:
+        return f"{seconds // 3600} jam"
+    if seconds % 60 == 0:
+        return f"{seconds // 60} menit"
+    return f"{seconds} detik"
+
+
+def _current_period_start(period_seconds: int) -> datetime:
+    now_epoch = int(datetime.now(timezone.utc).timestamp())
+    window_start_epoch = (now_epoch // period_seconds) * period_seconds
+    return datetime.fromtimestamp(window_start_epoch, tz=timezone.utc)
 
 
 def generate_api_key() -> str:
@@ -33,21 +49,25 @@ def authenticate_api_key(plaintext_key: str, db: Session) -> ApiKey:
 
 
 def check_and_increment_quota(api_key: ApiKey, db: Session) -> None:
-    today = date.today()
+    period_start = _current_period_start(api_key.quota_period_seconds)
     counter = (
         db.query(UsageCounter)
-        .filter(UsageCounter.api_key_id == api_key.id, UsageCounter.usage_date == today)
+        .filter(UsageCounter.api_key_id == api_key.id, UsageCounter.period_start == period_start)
         .first()
     )
     if counter is None:
-        counter = UsageCounter(api_key_id=api_key.id, usage_date=today, count=0)
+        counter = UsageCounter(api_key_id=api_key.id, period_start=period_start, count=0)
         db.add(counter)
         db.flush()
 
-    if counter.count >= api_key.daily_quota:
+    if counter.count >= api_key.quota_limit:
+        period_label = _format_period(api_key.quota_period_seconds)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Kuota harian ({api_key.daily_quota} request) untuk API key ini sudah habis. Coba lagi besok.",
+            detail=(
+                f"Kuota ({api_key.quota_limit} request per {period_label}) untuk API key ini sudah habis. "
+                "Coba lagi setelah periode berikutnya dimulai."
+            ),
         )
 
     counter.count += 1

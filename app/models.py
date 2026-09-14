@@ -1,9 +1,8 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
-    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -34,18 +33,19 @@ class ApiKey(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     label: Mapped[str] = mapped_column(String, nullable=False)
     key_hash: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    daily_quota: Mapped[int] = mapped_column(Integer, default=settings.DEFAULT_DAILY_QUOTA)
+    quota_limit: Mapped[int] = mapped_column(Integer, default=settings.DEFAULT_QUOTA_LIMIT)
+    quota_period_seconds: Mapped[int] = mapped_column(Integer, default=settings.DEFAULT_QUOTA_PERIOD_SECONDS)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class UsageCounter(Base):
     __tablename__ = "usage_counters"
-    __table_args__ = (UniqueConstraint("api_key_id", "usage_date", name="uq_key_date"),)
+    __table_args__ = (UniqueConstraint("api_key_id", "period_start", name="uq_key_period"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     api_key_id: Mapped[str] = mapped_column(ForeignKey("api_keys.id"), nullable=False)
-    usage_date: Mapped[date] = mapped_column(Date, nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     count: Mapped[int] = mapped_column(Integer, default=0)
 
 
