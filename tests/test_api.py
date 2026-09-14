@@ -61,3 +61,27 @@ def test_custom_quota_period_is_stored(client, admin_headers):
     )
     assert created["quota_limit"] == 10_000_000
     assert created["quota_period_seconds"] == 7200
+
+
+def test_messages_endpoint_accepts_api_key_directly(client, admin_headers):
+    created = create_key(client, admin_headers, label="klien-messages")
+
+    response = client.post(
+        "/v1/messages",
+        json={"model": "self-hosted", "messages": [{"role": "user", "content": "halo"}]},
+        headers={"x-api-key": created["api_key"]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["role"] == "assistant"
+    assert body["content"][0]["type"] == "text"
+    assert "halo" in body["content"][0]["text"]
+
+
+def test_messages_endpoint_rejects_wrong_api_key(client, admin_headers):
+    response = client.post(
+        "/v1/messages",
+        json={"messages": [{"role": "user", "content": "halo"}]},
+        headers={"x-api-key": "kunci-yang-tidak-pernah-ada"},
+    )
+    assert response.status_code == 401

@@ -164,6 +164,40 @@ Response:
 
 Setiap pemanggilan endpoint ini juga memakan kuota API key pemilik token untuk periode berjalan; kalau habis, responsnya `429`.
 
+### Endpoint kompatibilitas untuk client eksternal — `POST /v1/messages`
+
+Banyak aplikasi chat/client generic (LobeChat, NextChat, Chatbox, dll) punya form "Add custom provider" dengan satu kolom API key saja — tidak mendukung alur tukar API key → JWT di atas. Untuk kasus ini, `/v1/messages` meniru format **Anthropic Messages API** asli: API key dikirim langsung lewat header `x-api-key` (tanpa exchange token), persis seperti cara kerja API key Anthropic sungguhan.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/messages \
+  -H "x-api-key: <PLAINTEXT_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "self-hosted",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "Halo, ini tes"}]
+  }'
+```
+
+Response (bentuknya mengikuti skema Anthropic Messages API):
+
+```json
+{
+  "id": "msg_...",
+  "type": "message",
+  "role": "assistant",
+  "model": "self-hosted",
+  "content": [{"type": "text", "text": "[Placeholder] Model AI Anda belum dipasang di endpoint ini. Pesan yang diterima: Halo, ini tes"}],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {"input_tokens": 0, "output_tokens": 0}
+}
+```
+
+Endpoint ini juga memakan kuota API key untuk periode berjalan (kalau habis, `429`) dan menolak key yang salah/di-revoke (`401`) — sama seperti endpoint lain. **Catatan:** isi `content` masih placeholder; ganti bagian yang ditandai `# Placeholder: panggil model AI sendiri di sini` di `app/main.py` (fungsi `messages`) dengan panggilan ke model AI Anda yang sesungguhnya.
+
+Kalau client Anda meminta "Base URL", isi dengan alamat server ini **tanpa** `/v1/messages` di belakangnya (mis. `http://127.0.0.1:8000`) — client biasanya menambahkan path itu sendiri. Kalau ternyata client Anda mengharapkan bentuk request/response yang sedikit berbeda, sesuaikan skema `MessagesRequest` di `app/schemas.py` dan payload return di `app/main.py`.
+
 ### Health check
 
 ```bash
@@ -178,7 +212,7 @@ pip install -r requirements.txt
 pytest -v
 ```
 
-Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, kuota habis mengembalikan `429`, dan periode kuota kustom (mis. per 2 jam) tersimpan dengan benar.
+Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, kuota habis mengembalikan `429`, periode kuota kustom (mis. per 2 jam) tersimpan dengan benar, dan `/v1/messages` menerima API key langsung lewat header `x-api-key` (sukses & ditolak untuk key salah).
 
 ## Deploy self-hosted dengan Docker
 

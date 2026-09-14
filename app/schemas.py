@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -55,3 +56,18 @@ class PredictRequest(BaseModel):
 
 class PredictResponse(BaseModel):
     result: str
+
+
+class MessageInput(BaseModel):
+    role: str
+    content: Any
+
+    model_config = {"extra": "ignore"}
+
+
+class MessagesRequest(BaseModel):
+    model: str | None = None
+    max_tokens: int | None = None
+    messages: list[MessageInput]
+
+    model_config = {"extra": "ignore"}

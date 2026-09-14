@@ -113,3 +113,12 @@ def get_current_api_key(
 
     check_and_increment_quota(api_key, db)
     return api_key
+
+
+def get_api_key_from_x_api_key(
+    x_api_key: str = Header(...),
+    db: Session = Depends(get_db),
+) -> ApiKey:
+    api_key = authenticate_api_key(x_api_key, db)
+    check_and_increment_quota(api_key, db)
+    return api_key
