@@ -85,3 +85,49 @@ def test_messages_endpoint_rejects_wrong_api_key(client, admin_headers):
         headers={"x-api-key": "kunci-yang-tidak-pernah-ada"},
     )
     assert response.status_code == 401
+
+
+def test_chat_completions_accepts_bearer_api_key(client, admin_headers):
+    created = create_key(client, admin_headers, label="klien-chat-completions")
+
+    response = client.post(
+        "/chat/completions",
+        json={"model": "self-hosted", "messages": [{"role": "user", "content": "halo chat"}]},
+        headers={"Authorization": f"Bearer {created['api_key']}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "chat.completion"
+    assert "halo chat" in body["choices"][0]["message"]["content"]
+
+
+def test_chat_completions_rejects_wrong_api_key(client, admin_headers):
+    response = client.post(
+        "/chat/completions",
+        json={"messages": [{"role": "user", "content": "halo"}]},
+        headers={"Authorization": "Bearer kunci-yang-tidak-pernah-ada"},
+    )
+    assert response.status_code == 401
+
+
+def test_responses_endpoint_accepts_bearer_api_key(client, admin_headers):
+    created = create_key(client, admin_headers, label="klien-responses")
+
+    response = client.post(
+        "/responses",
+        json={"model": "self-hosted", "input": "halo responses"},
+        headers={"Authorization": f"Bearer {created['api_key']}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "response"
+    assert "halo responses" in body["output_text"]
+
+
+def test_responses_endpoint_rejects_wrong_api_key(client, admin_headers):
+    response = client.post(
+        "/responses",
+        json={"input": "halo"},
+        headers={"Authorization": "Bearer kunci-yang-tidak-pernah-ada"},
+    )
+    assert response.status_code == 401

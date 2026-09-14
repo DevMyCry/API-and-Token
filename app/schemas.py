@@ -71,3 +71,20 @@ class MessagesRequest(BaseModel):
     messages: list[MessageInput]
 
     model_config = {"extra": "ignore"}
+
+
+class ChatCompletionsRequest(BaseModel):
+    model: str | None = None
+    messages: list[MessageInput]
+    max_tokens: int | None = None
+    temperature: float | None = None
+
+    model_config = {"extra": "ignore"}
+
+
+class ResponsesRequest(BaseModel):
+    model: str | None = None
+    input: Any
+    max_output_tokens: int | None = None
+
+    model_config = {"extra": "ignore"}

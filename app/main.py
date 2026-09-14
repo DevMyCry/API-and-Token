@@ -1,6 +1,8 @@
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -11,17 +13,61 @@ from app.auth import (
     authenticate_api_key,
     check_and_increment_quota,
     create_access_token,
+    get_api_key_from_bearer,
     get_api_key_from_x_api_key,
     get_current_api_key,
 )
 from app.models import ApiKey, get_db, init_db
 from app.schemas import (
+    ChatCompletionsRequest,
+    MessageInput,
     MessagesRequest,
     PredictRequest,
     PredictResponse,
+    ResponsesRequest,
     TokenRequest,
     TokenResponse,
 )
+
+
+def _extract_last_user_text(messages: list[MessageInput]) -> str:
+    for message in reversed(messages):
+        if message.role != "user":
+            continue
+        content = message.content
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return " ".join(
+                block.get("text", "") for block in content if isinstance(block, dict)
+            ).strip()
+        break
+    return ""
+
+
+def _extract_responses_input_text(input_value: Any) -> str:
+    if isinstance(input_value, str):
+        return input_value
+    if isinstance(input_value, list):
+        for item in reversed(input_value):
+            if not isinstance(item, dict) or item.get("role") != "user":
+                continue
+            content = item.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return " ".join(
+                    block.get("text", "") for block in content if isinstance(block, dict)
+                ).strip()
+    return ""
+
+
+def _placeholder_reply(user_text: str) -> str:
+    # Placeholder: panggil model AI sendiri di sini, lalu ganti teks ini dengan hasilnya.
+    return (
+        "[Placeholder] Model AI Anda belum dipasang di endpoint ini. "
+        f"Pesan yang diterima: {user_text or '(kosong)'}"
+    )
 
 
 @asynccontextmanager
@@ -58,30 +104,8 @@ def predict(payload: PredictRequest, api_key: ApiKey = Depends(get_current_api_k
 
 @app.post("/v1/messages")
 def messages(payload: MessagesRequest, api_key: ApiKey = Depends(get_api_key_from_x_api_key)):
-    """Endpoint kompatibilitas untuk client eksternal yang bicara format Anthropic Messages API.
-
-    Beda dengan /v1/predict, endpoint ini menerima API key langsung lewat header
-    `x-api-key` (tanpa exchange JWT) supaya cocok dengan client generic yang cuma
-    punya satu kolom "API key" — persis cara kerja API key Anthropic asli.
-    """
-    last_user_text = ""
-    for message in reversed(payload.messages):
-        if message.role != "user":
-            continue
-        content = message.content
-        if isinstance(content, str):
-            last_user_text = content
-        elif isinstance(content, list):
-            last_user_text = " ".join(
-                block.get("text", "") for block in content if isinstance(block, dict)
-            ).strip()
-        break
-
-    # Placeholder: panggil model AI sendiri di sini, lalu ganti teks di bawah dengan hasilnya.
-    reply_text = (
-        "[Placeholder] Model AI Anda belum dipasang di endpoint ini. "
-        f"Pesan yang diterima: {last_user_text or '(kosong)'}"
-    )
+    """Kompatibilitas format "Anthropic messages" — API key lewat header x-api-key."""
+    reply_text = _placeholder_reply(_extract_last_user_text(payload.messages))
 
     return {
         "id": f"msg_{uuid.uuid4().hex}",
@@ -92,4 +116,53 @@ def messages(payload: MessagesRequest, api_key: ApiKey = Depends(get_api_key_fro
         "stop_reason": "end_turn",
         "stop_sequence": None,
         "usage": {"input_tokens": 0, "output_tokens": 0},
+    }
+
+
+@app.post("/chat/completions")
+@app.post("/v1/chat/completions")
+def chat_completions(payload: ChatCompletionsRequest, api_key: ApiKey = Depends(get_api_key_from_bearer)):
+    """Kompatibilitas format "Chat completions" ala OpenAI — Authorization: Bearer <API key>."""
+    reply_text = _placeholder_reply(_extract_last_user_text(payload.messages))
+
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": payload.model or "self-hosted-placeholder",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": reply_text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
+
+
+@app.post("/responses")
+@app.post("/v1/responses")
+def responses(payload: ResponsesRequest, api_key: ApiKey = Depends(get_api_key_from_bearer)):
+    """Kompatibilitas format "Responses" ala OpenAI — Authorization: Bearer <API key>."""
+    reply_text = _placeholder_reply(_extract_responses_input_text(payload.input))
+    message_id = f"msg_{uuid.uuid4().hex}"
+
+    return {
+        "id": f"resp_{uuid.uuid4().hex}",
+        "object": "response",
+        "created_at": int(time.time()),
+        "model": payload.model or "self-hosted-placeholder",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "id": message_id,
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": reply_text, "annotations": []}],
+            }
+        ],
+        "output_text": reply_text,
+        "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
     }

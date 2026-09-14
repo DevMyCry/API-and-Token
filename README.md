@@ -164,9 +164,17 @@ Response:
 
 Setiap pemanggilan endpoint ini juga memakan kuota API key pemilik token untuk periode berjalan; kalau habis, responsnya `429`.
 
-### Endpoint kompatibilitas untuk client eksternal — `POST /v1/messages`
+### Endpoint kompatibilitas untuk client eksternal
 
-Banyak aplikasi chat/client generic (LobeChat, NextChat, Chatbox, dll) punya form "Add custom provider" dengan satu kolom API key saja — tidak mendukung alur tukar API key → JWT di atas. Untuk kasus ini, `/v1/messages` meniru format **Anthropic Messages API** asli: API key dikirim langsung lewat header `x-api-key` (tanpa exchange token), persis seperti cara kerja API key Anthropic sungguhan.
+Banyak aplikasi chat/client generic (LobeChat, NextChat, Chatbox, dll) punya form "Add custom provider" dengan pilihan **API format** dan satu kolom API key saja — tidak mendukung alur tukar API key → JWT seperti `/v1/predict`. Untuk kasus ini, backend menyediakan 3 endpoint yang masing-masing meniru salah satu format API provider populer, supaya cocok dipasang di pilihan format apa pun yang tersedia di client Anda. Ketiganya tetap memakai sistem hash-check dan kuota per API key yang sama — menolak key salah/di-revoke (`401`) dan mengembalikan `429` kalau kuota habis.
+
+**Isinya semua masih placeholder** — ganti bagian bertanda `_placeholder_reply(...)` di `app/main.py` dengan panggilan ke model AI Anda yang sesungguhnya begitu sudah siap.
+
+Kalau client Anda meminta "Base URL", isi dengan alamat server ini saja (mis. `http://127.0.0.1:8000`), **tanpa** path endpoint di belakangnya — client yang menambahkan path itu sendiri sesuai format yang Anda pilih.
+
+#### 1. Format "Anthropic messages" — `POST /v1/messages`
+
+API key dikirim langsung lewat header `x-api-key` (tanpa exchange token), persis seperti cara kerja API key Anthropic asli.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/messages \
@@ -179,7 +187,7 @@ curl -X POST http://127.0.0.1:8000/v1/messages \
   }'
 ```
 
-Response (bentuknya mengikuti skema Anthropic Messages API):
+Response:
 
 ```json
 {
@@ -187,16 +195,70 @@ Response (bentuknya mengikuti skema Anthropic Messages API):
   "type": "message",
   "role": "assistant",
   "model": "self-hosted",
-  "content": [{"type": "text", "text": "[Placeholder] Model AI Anda belum dipasang di endpoint ini. Pesan yang diterima: Halo, ini tes"}],
+  "content": [{"type": "text", "text": "[Placeholder] ..."}],
   "stop_reason": "end_turn",
   "stop_sequence": null,
   "usage": {"input_tokens": 0, "output_tokens": 0}
 }
 ```
 
-Endpoint ini juga memakan kuota API key untuk periode berjalan (kalau habis, `429`) dan menolak key yang salah/di-revoke (`401`) — sama seperti endpoint lain. **Catatan:** isi `content` masih placeholder; ganti bagian yang ditandai `# Placeholder: panggil model AI sendiri di sini` di `app/main.py` (fungsi `messages`) dengan panggilan ke model AI Anda yang sesungguhnya.
+#### 2. Format "Chat completions" — `POST /chat/completions` (alias `/v1/chat/completions`)
 
-Kalau client Anda meminta "Base URL", isi dengan alamat server ini **tanpa** `/v1/messages` di belakangnya (mis. `http://127.0.0.1:8000`) — client biasanya menambahkan path itu sendiri. Kalau ternyata client Anda mengharapkan bentuk request/response yang sedikit berbeda, sesuaikan skema `MessagesRequest` di `app/schemas.py` dan payload return di `app/main.py`.
+Meniru Chat Completions API ala OpenAI (format ini juga yang paling umum didukung tool self-hosted-LLM lain seperti Ollama/LM Studio/vLLM). API key dikirim lewat `Authorization: Bearer <API key>` — key mentah, bukan JWT.
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat/completions \
+  -H "Authorization: Bearer <PLAINTEXT_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "self-hosted",
+    "messages": [{"role": "user", "content": "Halo, ini tes"}]
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
+  "created": 1737000000,
+  "model": "self-hosted",
+  "choices": [{"index": 0, "message": {"role": "assistant", "content": "[Placeholder] ..."}, "finish_reason": "stop"}],
+  "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+}
+```
+
+#### 3. Format "Responses" — `POST /responses` (alias `/v1/responses`)
+
+Meniru Responses API generasi terbaru ala OpenAI. Sama seperti Chat Completions, API key lewat `Authorization: Bearer <API key>`. Field `input` boleh berupa string langsung atau array pesan bergaya `messages`.
+
+```bash
+curl -X POST http://127.0.0.1:8000/responses \
+  -H "Authorization: Bearer <PLAINTEXT_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "self-hosted",
+    "input": "Halo, ini tes"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "resp_...",
+  "object": "response",
+  "created_at": 1737000000,
+  "model": "self-hosted",
+  "status": "completed",
+  "output": [{"type": "message", "id": "msg_...", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "[Placeholder] ...", "annotations": []}]}],
+  "output_text": "[Placeholder] ...",
+  "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+}
+```
+
+Kalau ternyata client Anda mengharapkan bentuk request/response yang sedikit berbeda dari salah satu di atas, sesuaikan skema terkait (`MessagesRequest`, `ChatCompletionsRequest`, `ResponsesRequest`) di `app/schemas.py` dan payload return-nya di `app/main.py`.
 
 ### Health check
 
@@ -212,7 +274,7 @@ pip install -r requirements.txt
 pytest -v
 ```
 
-Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, kuota habis mengembalikan `429`, periode kuota kustom (mis. per 2 jam) tersimpan dengan benar, dan `/v1/messages` menerima API key langsung lewat header `x-api-key` (sukses & ditolak untuk key salah).
+Tes mencakup: generate key & tukar token (sukses), API key salah ditolak, API key yang sudah di-revoke ditolak, kuota habis mengembalikan `429`, periode kuota kustom (mis. per 2 jam) tersimpan dengan benar, dan ketiga endpoint kompatibilitas (`/v1/messages`, `/chat/completions`, `/responses`) menerima API key sukses & menolak key salah.
 
 ## Deploy self-hosted dengan Docker
 

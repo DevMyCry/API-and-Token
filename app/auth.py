@@ -122,3 +122,21 @@ def get_api_key_from_x_api_key(
     api_key = authenticate_api_key(x_api_key, db)
     check_and_increment_quota(api_key, db)
     return api_key
+
+
+def get_api_key_from_bearer(
+    authorization: str = Header(...),
+    db: Session = Depends(get_db),
+) -> ApiKey:
+    """Untuk endpoint bergaya OpenAI: Authorization: Bearer <API key mentah>.
+
+    Beda dengan get_current_api_key, di sini token Bearer diperlakukan sebagai
+    API key mentah (di-hash & dicocokkan langsung), bukan JWT hasil /auth/token.
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Header Authorization harus berupa Bearer token")
+
+    raw_key = authorization.removeprefix("Bearer ").strip()
+    api_key = authenticate_api_key(raw_key, db)
+    check_and_increment_quota(api_key, db)
+    return api_key
