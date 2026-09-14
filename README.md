@@ -43,6 +43,15 @@ uvicorn app.main:app --reload
 
 Server jalan di `http://127.0.0.1:8000`. Database SQLite (`data.db`) akan dibuat otomatis di direktori kerja saat server pertama kali start.
 
+## Antarmuka (UI)
+
+Backend ini adalah REST API — tidak ada frontend berat. Dua cara mengaksesnya lewat browser:
+
+- **`http://127.0.0.1:8000/admin/ui/`** — halaman admin sederhana (HTML/JS polos, tanpa dependency eksternal) untuk membuat, melihat, revoke, dan rotate API key. Masukkan `ADMIN_SECRET` Anda di halaman ini (tersimpan sementara di `sessionStorage` browser, tidak pernah dikirim ke pihak lain selain server ini sendiri).
+- **`http://127.0.0.1:8000/docs`** — dokumentasi interaktif bawaan FastAPI (Swagger UI) untuk mencoba semua endpoint, termasuk `/auth/token` dan `/v1/predict`.
+
+Keduanya hanya bisa diakses dari mesin tempat server ini benar-benar berjalan (lokal Anda, atau server hasil deploy Docker) — bukan dari sesi Claude Code ini.
+
 ## Konfigurasi (environment variable)
 
 Lihat `.env.example`:

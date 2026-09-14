@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin API Key</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --border: #e2e2e6;
+    --text: #1a1a1e;
+    --muted: #6b6b73;
+    --accent: #2563eb;
+    --danger: #dc2626;
+    --warn-bg: #fff7ed;
+    --warn-border: #fb923c;
+    --ok-bg: #f0fdf4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --card: #1f1f24;
+      --border: #303038;
+      --text: #f0f0f2;
+      --muted: #9a9aa2;
+      --accent: #60a5fa;
+      --danger: #f87171;
+      --warn-bg: #2a1f12;
+      --warn-border: #b45309;
+      --ok-bg: #10231a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { margin-top: 0; font-size: 1.05rem; }
+  label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--muted); }
+  input, select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 160px; }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    background: var(--accent);
+    color: white;
+  }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.danger { background: var(--danger); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions button { padding: 5px 10px; font-size: 0.8rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; }
+  .badge.active { background: var(--ok-bg); color: #16a34a; }
+  .badge.revoked { background: var(--warn-bg); color: var(--danger); }
+  .key-reveal {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+  }
+  .key-reveal code {
+    display: block;
+    word-break: break-all;
+    background: rgba(0,0,0,0.06);
+    padding: 8px;
+    border-radius: 6px;
+    margin: 8px 0;
+    font-size: 0.85rem;
+  }
+  .msg { font-size: 0.85rem; margin-top: 8px; }
+  .msg.error { color: var(--danger); }
+  .msg.ok { color: #16a34a; }
+  .table-wrap { overflow-x: auto; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -8px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Admin API Key</h1>
+  <p class="subtitle">Kelola API key &amp; kuota untuk provider Anda sendiri. Halaman ini memanggil REST API yang sama (<code>/admin/keys</code>) — tidak ada logika tersembunyi.</p>
+
+  <div class="card">
+    <h2>Admin secret</h2>
+    <label for="adminSecret">X-Admin-Secret</label>
+    <input id="adminSecret" type="password" placeholder="Masukkan ADMIN_SECRET dari .env server ini" autocomplete="off" />
+    <p class="hint">Disimpan sementara di browser Anda (sessionStorage) selama tab ini terbuka saja — tidak dikirim ke mana pun selain server ini.</p>
+    <button id="saveSecretBtn">Simpan &amp; muat daftar key</button>
+    <div id="secretMsg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Buat API key baru</h2>
+    <div class="row">
+      <div>
+        <label for="label">Label / nama klien</label>
+        <input id="label" type="text" placeholder="mis. klien-a" />
+      </div>
+      <div>
+        <label for="quotaLimit">Kuota (jumlah request)</label>
+        <input id="quotaLimit" type="number" min="1" placeholder="default: DEFAULT_QUOTA_LIMIT" />
+      </div>
+      <div>
+        <label for="quotaPeriod">Per periode</label>
+        <select id="quotaPeriod">
+          <option value="">Default server</option>
+          <option value="3600">1 jam</option>
+          <option value="7200">2 jam</option>
+          <option value="21600">6 jam</option>
+          <option value="86400">1 hari</option>
+          <option value="__custom">Custom (detik)…</option>
+        </select>
+        <input id="quotaPeriodCustom" type="number" min="1" placeholder="jumlah detik" style="display:none" />
+      </div>
+    </div>
+    <button id="createBtn">Buat key</button>
+    <div id="createMsg" class="msg"></div>
+    <div id="createReveal"></div>
+  </div>
+
+  <div class="card">
+    <h2>Daftar API key</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>Kuota / periode</th>
+            <th>Status</th>
+            <th>Dibuat</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="keysBody">
+          <tr><td colspan="5" style="color:var(--muted)">Belum ada data. Masukkan admin secret di atas.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const secretInput = document.getElementById('adminSecret');
+const secretMsg = document.getElementById('secretMsg');
+const keysBody = document.getElementById('keysBody');
+const createMsg = document.getElementById('createMsg');
+const createReveal = document.getElementById('createReveal');
+const quotaPeriodSelect = document.getElementById('quotaPeriod');
+const quotaPeriodCustom = document.getElementById('quotaPeriodCustom');
+
+quotaPeriodSelect.addEventListener('change', () => {
+  quotaPeriodCustom.style.display = quotaPeriodSelect.value === '__custom' ? 'block' : 'none';
+});
+
+function getSecret() {
+  return sessionStorage.getItem('admin_secret') || '';
+}
+
+function setMsg(el, text, kind) {
+  el.textContent = text || '';
+  el.className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+function humanPeriod(seconds) {
+  if (seconds % 86400 === 0) return (seconds / 86400) + ' hari';
+  if (seconds % 3600 === 0) return (seconds / 3600) + ' jam';
+  if (seconds % 60 === 0) return (seconds / 60) + ' menit';
+  return seconds + ' detik';
+}
+
+async function apiFetch(path, options = {}) {
+  const secret = getSecret();
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'X-Admin-Secret': secret,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  let body = null;
+  try { body = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const detail = (body && body.detail) ? body.detail : ('HTTP ' + res.status);
+    throw new Error(detail);
+  }
+  return body;
+}
+
+function renderKeys(keys) {
+  if (!keys.length) {
+    keysBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">Belum ada API key.</td></tr>';
+    return;
+  }
+  keysBody.innerHTML = '';
+  for (const k of keys) {
+    const tr = document.createElement('tr');
+
+    const tdLabel = document.createElement('td');
+    tdLabel.textContent = k.label;
+    tr.appendChild(tdLabel);
+
+    const tdQuota = document.createElement('td');
+    tdQuota.textContent = k.quota_limit.toLocaleString('id-ID') + ' / ' + humanPeriod(k.quota_period_seconds);
+    tr.appendChild(tdQuota);
+
+    const tdStatus = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + (k.is_revoked ? 'revoked' : 'active');
+    badge.textContent = k.is_revoked ? 'Revoked' : 'Aktif';
+    tdStatus.appendChild(badge);
+    tr.appendChild(tdStatus);
+
+    const tdCreated = document.createElement('td');
+    tdCreated.textContent = new Date(k.created_at).toLocaleString('id-ID');
+    tr.appendChild(tdCreated);
+
+    const tdActions = document.createElement('td');
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    const revokeBtn = document.createElement('button');
+    revokeBtn.className = 'danger';
+    revokeBtn.textContent = 'Revoke';
+    revokeBtn.disabled = k.is_revoked;
+    revokeBtn.onclick = () => revokeKey(k.id);
+    actions.appendChild(revokeBtn);
+
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'secondary';
+    rotateBtn.textContent = 'Rotate';
+    rotateBtn.onclick = () => rotateKey(k.id);
+    actions.appendChild(rotateBtn);
+
+    tdActions.appendChild(actions);
+    tr.appendChild(tdActions);
+
+    keysBody.appendChild(tr);
+  }
+}
+
+async function loadKeys() {
+  try {
+    const keys = await apiFetch('/admin/keys');
+    renderKeys(keys);
+    setMsg(secretMsg, 'Berhasil terhubung ke server.', 'ok');
+  } catch (err) {
+    setMsg(secretMsg, 'Gagal memuat daftar key: ' + err.message, 'error');
+    keysBody.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">Gagal memuat data.</td></tr>';
+  }
+}
+
+document.getElementById('saveSecretBtn').addEventListener('click', () => {
+  sessionStorage.setItem('admin_secret', secretInput.value.trim());
+  loadKeys();
+});
+
+function showRevealBox(container, title, data) {
+  container.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'key-reveal';
+  const strong = document.createElement('strong');
+  strong.textContent = title + ' — plaintext hanya tampil sekali, simpan sekarang:';
+  box.appendChild(strong);
+
+  const code = document.createElement('code');
+  code.textContent = data.api_key;
+  box.appendChild(code);
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'secondary';
+  copyBtn.textContent = 'Salin ke clipboard';
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(data.api_key);
+      copyBtn.textContent = 'Tersalin!';
+      setTimeout(() => (copyBtn.textContent = 'Salin ke clipboard'), 1500);
+    } catch (_) {
+      alert('Gagal menyalin otomatis, silakan salin manual dari kotak di atas.');
+    }
+  };
+  box.appendChild(copyBtn);
+
+  const info = document.createElement('div');
+  info.style.marginTop = '8px';
+  info.style.color = 'var(--muted)';
+  info.textContent = 'Kuota: ' + data.quota_limit.toLocaleString('id-ID') + ' / ' + humanPeriod(data.quota_period_seconds);
+  box.appendChild(info);
+
+  container.appendChild(box);
+}
+
+document.getElementById('createBtn').addEventListener('click', async () => {
+  const label = document.getElementById('label').value.trim();
+  if (!label) {
+    setMsg(createMsg, 'Label wajib diisi.', 'error');
+    return;
+  }
+  const quotaLimitRaw = document.getElementById('quotaLimit').value.trim();
+  let periodValue = quotaPeriodSelect.value;
+  if (periodValue === '__custom') {
+    periodValue = quotaPeriodCustom.value.trim();
+  }
+
+  const payload = { label };
+  if (quotaLimitRaw) payload.quota_limit = parseInt(quotaLimitRaw, 10);
+  if (periodValue) payload.quota_period_seconds = parseInt(periodValue, 10);
+
+  try {
+    setMsg(createMsg, 'Membuat key…');
+    const created = await apiFetch('/admin/keys', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    setMsg(createMsg, 'Key "' + created.label + '" berhasil dibuat.', 'ok');
+    showRevealBox(createReveal, 'API key baru', created);
+    document.getElementById('label').value = '';
+    document.getElementById('quotaLimit').value = '';
+    loadKeys();
+  } catch (err) {
+    setMsg(createMsg, 'Gagal membuat key: ' + err.message, 'error');
+  }
+});
+
+async function revokeKey(id) {
+  if (!confirm('Revoke key ini? Key tidak akan bisa dipakai lagi setelah ini.')) return;
+  try {
+    await apiFetch('/admin/keys/' + id + '/revoke', { method: 'POST' });
+    loadKeys();
+  } catch (err) {
+    alert('Gagal revoke: ' + err.message);
+  }
+}
+
+async function rotateKey(id) {
+  if (!confirm('Rotate key ini? Key lama langsung tidak berlaku, klien harus pakai key baru.')) return;
+  try {
+    const rotated = await apiFetch('/admin/keys/' + id + '/rotate', { method: 'POST' });
+    showRevealBox(createReveal, 'Key hasil rotate', rotated);
+    loadKeys();
+  } catch (err) {
+    alert('Gagal rotate: ' + err.message);
+  }
+}
+
+// Auto-load kalau secret sudah tersimpan dari sesi sebelumnya di tab ini.
+if (getSecret()) {
+  secretInput.value = getSecret();
+  loadKeys();
+}
+</script>
+</body>
+</html>

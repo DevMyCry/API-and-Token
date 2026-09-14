@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from app.admin import router as admin_router
@@ -22,6 +24,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="API & Token Provider", version="1.0.0", lifespan=lifespan)
 app.include_router(admin_router)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/admin/ui", StaticFiles(directory=STATIC_DIR, html=True), name="admin-ui")
 
 
 @app.get("/health")
